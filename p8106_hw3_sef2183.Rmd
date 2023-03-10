@@ -1,5 +1,5 @@
 ---
-title: "P8106 Data Science II Homework 3: "
+title: "P8106 Data Science II Homework 3: Predicting Gas Milage"
 author: "Sarah Forrest - sef2183"
 date: "3/24/2023"
 output:
@@ -27,3 +27,78 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r, include = FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 ```
+
+# Data
+
+In this exercise, we build a model to predict whether a given car gets high or low gas mileage based on a set of predictors from the dataset “auto.csv”. The dataset contains 392 observations. The response variable is `mpg_cat`, which indicates whether the miles per gallon of a car is high or low. 
+
+```{r}
+# read in data
+auto = read.csv("data/auto.csv") 
+```
+
+Split the dataset into two parts: training data (70%) and test data (30%).
+
+```{r}
+set.seed(1)
+
+# specify rows of training data (70% of the dataset)
+trRows <- createDataPartition(auto$mpg_cat, 
+                              p = .7,
+                              list = F)
+
+# training data
+auto_train <- auto[trRows, ]
+## matrix of predictors
+x <- model.matrix(mpg_cat~.,auto)[trRows,-1]
+## vector of response
+y <- auto$mpg_cat[trRows]
+
+# test data
+auto_test <- auto[-trRows, ]
+## matrix of predictors
+x2 <- model.matrix(mpg_cat~.,auto)[-trRows,-1]
+## vector of response
+y2 <- auto$mpg_cat[-trRows]
+```
+
+# (a) Perform a logistic regression using the training data.
+
+```{r}
+set.seed(1)
+```
+
+Predictors in the model [APPEAR/DO NOT APPEAR] to be statistically significant? [If so, which ones?] 
+
+**Confusion matrix using the test data with a probability threshold to determine class labels**
+
+```{r}
+```
+
+The confusion matrix is telling [].
+
+# (b) Train a multivariate adaptive regression spline (MARS) model using the training data.
+
+```{r}
+```
+
+# (c) Perform LDA using the training data.
+
+```{r}
+```
+
+## Plot of the linear discriminants in LDA
+
+# (d) Prediction of the response variable.
+
+```{r}
+```
+
+I would use the [] model to predict the response variable, `mpg_cat`. 
+
+## Plot of ROC curve using the test data. 
+
+```{r}
+```
+
+The AUC is []. The misclassification error rate is [].
