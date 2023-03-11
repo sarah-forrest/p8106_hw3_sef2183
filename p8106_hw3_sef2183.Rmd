@@ -2,30 +2,19 @@
 title: "P8106 Data Science II Homework 3: Predicting Gas Milage"
 author: "Sarah Forrest - sef2183"
 date: "3/24/2023"
-output:
-  pdf_document:
-    toc: yes
-    toc_depth: 2
-  html_document:
-    df_print: paged
-    toc: yes
-    toc_depth: '2'
-header-includes:
-- \usepackage{fancyhdr}
-- \usepackage{lipsum}
-- \pagestyle{fancy}
-- \fancyhead[R]{\thepage}
-- \fancypagestyle{plain}{\pagestyle{fancy}}
---- 
-
-\newpage
-
+output: github_document
+---
+  
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
 ```{r, include = FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
+library(caret)
+library(glmnet)
+library(MASS)
+library(pROC)
 ```
 
 # Data
@@ -37,61 +26,116 @@ In this exercise, we build a model to predict whether a given car gets high or l
 auto = read.csv("data/auto.csv") 
 ```
 
-Split the dataset into two parts: training data (70%) and test data (30%).
+Split the dataset into two parts: training data (70%) and test data (30%):
 
 ```{r}
 set.seed(1)
 
 # specify rows of training data (70% of the dataset)
-trRows <- createDataPartition(auto$mpg_cat, 
+rowTrain <- createDataPartition(y = auto$mpg_cat, 
                               p = .7,
                               list = F)
 
-# training data
-auto_train <- auto[trRows, ]
-## matrix of predictors
-x <- model.matrix(mpg_cat~.,auto)[trRows,-1]
-## vector of response
-y <- auto$mpg_cat[trRows]
+```
 
-# test data
-auto_test <- auto[-trRows, ]
-## matrix of predictors
-x2 <- model.matrix(mpg_cat~.,auto)[-trRows,-1]
-## vector of response
-y2 <- auto$mpg_cat[-trRows]
+Mutate the data so the outcome variable `mpg_cat` takes numberic values of 0 and 1 rather than character values "low" and "high" in order to run the `glm()` function:
+
+```{r}
+auto_glm = 
+  auto %>%
+  mutate(mpg_cat = case_when(
+    mpg_cat == "low" ~ 0,
+    mpg_cat == "high" ~ 1))
 ```
 
 # (a) Perform a logistic regression using the training data.
 
 ```{r}
 set.seed(1)
+
+glm.fit <- glm(mpg_cat ~ .,
+               data = auto_glm,
+               subset = rowTrain,
+               family = binomial(link = "logit"))
+
+summary(glm.fit)
 ```
 
-Predictors in the model [APPEAR/DO NOT APPEAR] to be statistically significant? [If so, which ones?] 
+Based on the summary of the logistic regression model printed above, some predictors in the model appear to be statistically significant at at least the 5% level of significance. The predictors that are statistically significant are: `weight` (vehicle weight (lbs.)), `year` (model year (modulo 100)), and `origin` (origin of car - options include: American, European, or Japanese).
 
-**Confusion matrix using the test data with a probability threshold to determine class labels**
+**Confusion matrix using the test data with a probability threshold set to 0.50 to determine class labels**
 
 ```{r}
+test.pred.prob <- predict(glm.fit, newdata = auto_glm[-rowTrain,],
+                          type = "response")
+
+test.pred <- rep("0", length(test.pred.prob))
+test.pred[test.pred.prob > 0.5] <- "1"
+
+confusionMatrix(data = as.factor(test.pred),
+                reference = as.factor(auto_glm$mpg_cat[-rowTrain]),
+                positive = "1")
 ```
 
-The confusion matrix is telling [].
+The confusion matrix is showing that [].
 
 # (b) Train a multivariate adaptive regression spline (MARS) model using the training data.
 
 ```{r}
+set.seed(1)
+
+ctrl <- trainControl(method = "repeatedcv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+model.mars <- train(x = auto[rowTrain,1:7],
+                    y = as.factor(auto$mpg_cat[rowTrain]),
+                    method = "earth",
+                    tuneGrid = expand.grid(degree = 1:4,
+                                           nprune = 2:20),
+                    metric = "ROC",
+                    trControl = ctrl)
+
+plot(model.mars)
 ```
 
 # (c) Perform LDA using the training data.
 
 ```{r}
+set.seed(1)
+
+lda.fit <- lda(mpg_cat~., data = auto,
+               subset = rowTrain)
+
+lda.pred <- predict(lda.fit, newdata = auto[-rowTrain,])
+
+head(lda.pred$posterior)
 ```
+
+/*
+lda.fit$scaling
+head(predict(lda.fit)$x)
+mean(predict(lda.fit)$x)
+
+auto_t <- auto_glm[rowTrain,]
+x_l_tr <- auto_t[auto_t$mpg_cat == "low", 1:7]
+x_h_tr <- auto_t[auto_t$mpg_cat == "high", 1:7]
+cov.low <- cov(x_l_tr)
+cov.high <- cov(x_h_tr)
+n.low <- nrow(x_l_tr)
+n.high <- nrow(x_h_tr)
+n <- n.low + n.high
+K <- 2
+W <- 1/(n - K) * (cov.low * (n.low - 1) + cov.high * (n.high - 1))
+t(lda.fit$scaling) %*% W %*% lda.fit$scaling
+*/
 
 ## Plot of the linear discriminants in LDA
 
 # (d) Prediction of the response variable.
 
 ```{r}
+plot(lda.fit) # check if correct
 ```
 
 I would use the [] model to predict the response variable, `mpg_cat`. 
@@ -99,6 +143,11 @@ I would use the [] model to predict the response variable, `mpg_cat`.
 ## Plot of ROC curve using the test data. 
 
 ```{r}
+set.seed(1)
+
+roc <- roc(auto$mpg_cat[-rowTrain], test.pred.prob)
+plot(roc, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc), col = 4, add = TRUE)
 ```
 
-The AUC is []. The misclassification error rate is [].
+The AUC is 0.963. The misclassification error rate is [].
