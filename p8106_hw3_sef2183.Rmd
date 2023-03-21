@@ -38,7 +38,7 @@ rowTrain <- createDataPartition(y = auto$mpg_cat,
 
 ```
 
-Mutate the data so the outcome variable `mpg_cat` takes numberic values of 0 and 1 rather than character values "low" and "high" in order to run the `glm()` function:
+Mutate the data so the outcome variable `mpg_cat` takes numeric values of 0 and 1 rather than character values "low" and "high" in order to run the `glm()` function:
 
 ```{r}
 auto_glm = 
@@ -77,7 +77,7 @@ confusionMatrix(data = as.factor(test.pred),
                 positive = "1")
 ```
 
-The confusion matrix is showing that [].
+The confusion matrix is showing that the logistic regression model accurately predicted 51 of the data points as having low gas mileage and 51 of the data points as having high gas mileage. However, the logistic regression model incorrectly predicted 7 data points with low gas mileage as having high gas mileage, and 7 data points with high gas mileage as having low gas mileage. The resulting prediction accuracy is 87.93% (95% CI: 0.8058, 0.9324), with a No Information Rate (NIR) of 0.5. The kappa statistic takes into account the possibility of agreement by random chance. The kappa statistic of 0.7586 is closer to 1 (complete agreement) than to 0 (agreement by chance). It is also greater than a cutoff value of 0.6, indicating substantial agreement. The proportion of true positives in the positive observations (sensitivity) is the same as the proportion of true negatives in the negative observations (specificity). The value of 0.8793 for sensitivity and specificity is high, as it is closer to 1 than 0. Additionally, the PPV and NPV are equal and high, at a value of 0.8793 as well. 
 
 # (b) Train a multivariate adaptive regression spline (MARS) model using the training data.
 
@@ -88,7 +88,7 @@ ctrl <- trainControl(method = "repeatedcv",
                      summaryFunction = twoClassSummary,
                      classProbs = TRUE)
 
-model.mars <- train(x = auto[rowTrain,1:7],
+mars.fit <- train(x = auto[rowTrain,1:7],
                     y = as.factor(auto$mpg_cat[rowTrain]),
                     method = "earth",
                     tuneGrid = expand.grid(degree = 1:4,
@@ -96,7 +96,7 @@ model.mars <- train(x = auto[rowTrain,1:7],
                     metric = "ROC",
                     trControl = ctrl)
 
-plot(model.mars)
+# plot(mars.fit)
 ```
 
 # (c) Perform LDA using the training data.
@@ -107,47 +107,124 @@ set.seed(1)
 lda.fit <- lda(mpg_cat~., data = auto,
                subset = rowTrain)
 
-lda.pred <- predict(lda.fit, newdata = auto[-rowTrain,])
+# lda.pred <- predict(lda.fit, newdata = auto[-rowTrain,])
 
-head(lda.pred$posterior)
+# head(lda.pred$posterior)
 ```
-
-/*
-lda.fit$scaling
-head(predict(lda.fit)$x)
-mean(predict(lda.fit)$x)
-
-auto_t <- auto_glm[rowTrain,]
-x_l_tr <- auto_t[auto_t$mpg_cat == "low", 1:7]
-x_h_tr <- auto_t[auto_t$mpg_cat == "high", 1:7]
-cov.low <- cov(x_l_tr)
-cov.high <- cov(x_h_tr)
-n.low <- nrow(x_l_tr)
-n.high <- nrow(x_h_tr)
-n <- n.low + n.high
-K <- 2
-W <- 1/(n - K) * (cov.low * (n.low - 1) + cov.high * (n.high - 1))
-t(lda.fit$scaling) %*% W %*% lda.fit$scaling
-*/
 
 ## Plot of the linear discriminants in LDA
 
-# (d) Prediction of the response variable.
-
 ```{r}
-plot(lda.fit) # check if correct
+plot(lda.fit) # CHECK THIS
 ```
 
-I would use the [] model to predict the response variable, `mpg_cat`. 
+# (d) Prediction of the response variable.
+
+## Method 1:
+
+First, fit the GLM and LDA models using the caret package (note that the MARS model was already fit using the caret package):
+
+```{r}
+set.seed(1)
+
+# fit the GLM model using the training dataset
+glm.fit <- train(x = auto[rowTrain,1:7],
+                 y = as.factor(auto$mpg_cat[rowTrain]),
+                 method = "glm",
+                 metric = "ROC",
+                 trControl = ctrl) # 10-fold CV
+
+# fit the LDA model using the training dataset
+lda.fit <- train(x = auto[rowTrain,1:7],
+                y = as.factor(auto$mpg_cat[rowTrain]),
+                method = "lda",
+                metric = "ROC",
+                trControl = ctrl) # 10-fold CV
+```
+
+Then, apply the `predict()` function in the caret package to each model fit using the test dataset:
+
+```{r}
+set.seed(1)
+
+glm.pred <- predict(glm.fit, newdata = auto[-rowTrain,], type = "prob")[,2]
+mars.pred <- predict(mars.fit, newdata = auto[-rowTrain,], type = "prob")[,2]
+lda.pred <- predict(lda.fit, newdata = auto[-rowTrain,], type = "prob")[,2]
+
+roc.glm <- roc(auto$mpg_cat[-rowTrain], glm.pred)
+roc.mars <- roc(auto$mpg_cat[-rowTrain], mars.pred)
+roc.lda <- roc(auto$mpg_cat[-rowTrain], lda.pred)
+
+auc <- c(roc.glm$auc[1], roc.mars$auc[1], roc.lda$auc[1])
+
+modelNames <- c("glm", "mars", "lda")
+
+ggroc(list(roc.glm, roc.mars, roc.lda), legacy.axes = TRUE) +
+scale_color_discrete(labels = paste0(modelNames, " (", round(auc,3),")"),
+name = "Models (AUC)") +
+geom_abline(intercept = 0, slope = 1, color = "grey")
+```
+
+Using this method, I would use the GLM model to predict the response variable, `mpg_cat` because it has the highest value for area under the curve (AUC), which indicates best performance. 
+
+## Method 2
+
+Fit GLM, MARS, and LDA models using the test dataset, print ROC value(s), and use the `resamples()` function to calculate the mean AUC value for each model:
+
+```{r}
+set.seed(1)
+
+# GLM
+model.glm_test <- train(x = auto[-rowTrain,1:7], # test dataset
+                   y = as.factor(auto$mpg_cat[-rowTrain]),
+                   method = "glm",
+                   metric = "ROC",
+                   trControl = ctrl) # 10-fold CV
+
+# MARS
+model.mars_test <- train(x = auto[-rowTrain,1:7], # test dataset
+                    y = as.factor(auto$mpg_cat[-rowTrain]),
+                    method = "earth",
+                    tuneGrid = expand.grid(degree = 1:4,
+                                           nprune = 2:20),
+                    metric = "ROC",
+                    trControl = ctrl) # 10-fold CV
+
+# LDA
+model.lda_test <- train(x = auto[-rowTrain,1:7], # test dataset
+                   y = as.factor(auto$mpg_cat[-rowTrain]),
+                   method = "lda",
+                   metric = "ROC",
+                   trControl = ctrl) # 10-fold CV
+
+model.glm_test$results$ROC # print ROC value for GLM model
+model.mars_test$results$ROC # print ROC values for MARS model
+model.lda_test$results$ROC # print ROC value for LDA model
+
+res <- resamples(list(GLM = model.glm_test,
+                      MARS = model.mars_test,
+                      LDA = model.lda_test))
+summary(res)
+```
+
+Using this method, I would use the MARS model to predict the response variable, `mpg_cat` because it has the highest value for ROC/AUC.
 
 ## Plot of ROC curve using the test data. 
 
 ```{r}
 set.seed(1)
 
-roc <- roc(auto$mpg_cat[-rowTrain], test.pred.prob)
-plot(roc, legacy.axes = TRUE, print.auc = TRUE)
-plot(smooth(roc), col = 4, add = TRUE)
+# GLM model
+roc_glm <- roc(auto$mpg_cat[-rowTrain], test.pred.prob)
+plot(roc_glm, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc_glm), col = 4, add = TRUE)
+
+# MARS model
+roc_mars <- roc(auto$mpg_cat[-rowTrain], mars.pred)
+plot(roc_mars, legacy.axes = TRUE, print.auc = TRUE)
+plot(smooth(roc_mars), col = 4, add = TRUE)
 ```
 
-The AUC is 0.963. The misclassification error rate is [].
+The AUC for the GLM model is 0.963, indicating that the prediction performance is very good. The misclassification error rate is [].
+
+The AUC for the MARS model is slightly lower, at 0.943. Although lower than the GLM model, this AUC indicates that the prediction performance is very good for the MARS model as well. The misclassification error rate is [].
