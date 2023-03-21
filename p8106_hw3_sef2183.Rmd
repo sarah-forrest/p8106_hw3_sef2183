@@ -6,7 +6,7 @@ output: github_document
 ---
   
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+knitr::opts_chunk$set(collapse = TRUE, message = FALSE, warning = FALSE, dpi = 300, fig.width = 7)
 ```
 
 ```{r, include = FALSE, message=FALSE, warning=FALSE}
@@ -107,15 +107,14 @@ set.seed(1)
 lda.fit <- lda(mpg_cat~., data = auto,
                subset = rowTrain)
 
-# lda.pred <- predict(lda.fit, newdata = auto[-rowTrain,])
-
-# head(lda.pred$posterior)
+lda.pred <- predict(lda.fit, newdata = auto[-rowTrain,])
+head(lda.pred$posterior)
 ```
 
 ## Plot of the linear discriminants in LDA
 
 ```{r}
-plot(lda.fit) # CHECK THIS
+plot(lda.fit)
 ```
 
 # (d) Prediction of the response variable.
@@ -209,22 +208,23 @@ summary(res)
 
 Using this method, I would use the MARS model to predict the response variable, `mpg_cat` because it has the highest value for ROC/AUC.
 
-## Plot of ROC curve using the test data. 
+## Plot of ROC curve using the test data for the GLM model and misclassification error rate. 
 
 ```{r}
 set.seed(1)
 
-# GLM model
+# plot the ROC curve
 roc_glm <- roc(auto$mpg_cat[-rowTrain], test.pred.prob)
 plot(roc_glm, legacy.axes = TRUE, print.auc = TRUE)
 plot(smooth(roc_glm), col = 4, add = TRUE)
 
-# MARS model
-roc_mars <- roc(auto$mpg_cat[-rowTrain], mars.pred)
-plot(roc_mars, legacy.axes = TRUE, print.auc = TRUE)
-plot(smooth(roc_mars), col = 4, add = TRUE)
+
+# compute the confusion matrix and misclassification error rate
+cm <- confusionMatrix(data = as.factor(test.pred),
+                reference = as.factor(auto_glm$mpg_cat[-rowTrain]),
+                positive = "1")
+
+(1 - (cm$overall["Accuracy"])) # misclassification error rate = 1 - accuracy 
 ```
 
-The AUC for the GLM model is 0.963, indicating that the prediction performance is very good. The misclassification error rate is [].
-
-The AUC for the MARS model is slightly lower, at 0.943. Although lower than the GLM model, this AUC indicates that the prediction performance is very good for the MARS model as well. The misclassification error rate is [].
+The AUC for the GLM model is 0.963, indicating that the prediction performance is very good. The misclassification error rate (1 - accuracy) is 0.1206897 or about 12.07%.
